@@ -1,12 +1,11 @@
--- UniversalPremiumUI v4.1 Loader
+-- UniversalPremiumUI v4.2 Loader
 -- Multi-module Novoline-style shell
 
-local HttpService = game:GetService("HttpService")
 local BASE = "https://raw.githubusercontent.com/overeatenn/UniversalPremiumUI/main/src/"
 
 local function fetch(path)
 	local ok, res = pcall(function()
-		return game:HttpGet(BASE .. path)
+		return game:HttpGet(BASE .. path .. "?v=4.2")
 	end)
 	if not ok or not res or #res < 10 then
 		warn("[UP] failed to fetch " .. path)
@@ -30,7 +29,6 @@ local function run(src, name)
 	return result
 end
 
--- Bootstrap order
 local Theme      = run(fetch("Theme.lua"), "Theme")
 local State       = run(fetch("State.lua"), "State")
 local Components  = run(fetch("Components.lua"), "Components")
@@ -41,11 +39,9 @@ if not (Theme and State and Components and Keybinds) then
 	return
 end
 
--- Inject shared refs
 Components.Init(Theme, State)
 Keybinds.Init(Theme, State, Components)
 
--- Pages
 local HomePage     = run(fetch("Pages/Home.lua"), "Home")
 local CommandsPage = run(fetch("Pages/Commands.lua"), "Commands")
 local PlayersPage  = run(fetch("Pages/Players.lua"), "Players")
@@ -58,7 +54,6 @@ if PlayersPage then PlayersPage.Init(Theme, State, Components) end
 if ScriptsPage then ScriptsPage.Init(Theme, State, Components) end
 if SettingsPage then SettingsPage.Init(Theme, State, Components) end
 
--- Main shell
 local Main = run(fetch("Main.lua"), "Main")
 if Main then
 	Main.Init({
@@ -76,4 +71,4 @@ if Main then
 	})
 end
 
-print("[UniversalPremium v4.1] multi-module shell ready — RightShift")
+print("[UniversalPremium v4.2] multi-module shell ready — RightShift")
