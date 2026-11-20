@@ -1,6 +1,5 @@
--- language: Luau | UniversalPremiumUI.lua | Roblox executor / LocalScript
--- Premium dark glassmorphism interface
--- Real TweenService · modular panels · RGB mode · visual placeholders only (no game manipulation)
+-- UniversalPremiumUI v2.5 | pure UI only | no character / HumanoidDescription code
+-- RightShift toggles | destroy previous instance to prevent stack errors from other scripts
 
 local Players          = game:GetService("Players")
 local TweenService     = game:GetService("TweenService")
@@ -8,91 +7,71 @@ local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
 local Lighting         = game:GetService("Lighting")
 
-local LP        = Players.LocalPlayer
-local PlayerGui = LP:WaitForChild("PlayerGui")
+local LP = Players.LocalPlayer
+if not LP then return end
+local PlayerGui = LP:WaitForChild("PlayerGui", 10)
+if not PlayerGui then return end
 
-----------------------------------------------------------------
--- Config
-----------------------------------------------------------------
+-- kill any previous copy
+pcall(function()
+	local old = PlayerGui:FindFirstChild("UniversalPremium")
+	if old then old:Destroy() end
+end)
+
 local CFG = {
 	OpenKey   = Enum.KeyCode.RightShift,
-	Theme     = "Dark",   -- "Dark" | "RGB"
-	RGBSpeed  = 0.30,
-	AnimSpeed = 0.25,
+	Theme     = "Dark",
+	RGBSpeed  = 0.28,
+	AnimSpeed = 0.22,
 }
 
 local C = {
-	Bg      = Color3.fromRGB(11, 11, 13),
-	Panel   = Color3.fromRGB(20, 20, 24),
-	Panel2  = Color3.fromRGB(26, 26, 32),
-	Border  = Color3.fromRGB(45, 45, 53),
-	Text    = Color3.fromRGB(236, 236, 240),
-	Dim     = Color3.fromRGB(145, 145, 155),
-	Accent  = Color3.fromRGB(118, 138, 255),
-	Success = Color3.fromRGB(70, 195, 130),
-	Danger  = Color3.fromRGB(215, 80, 95),
+	Bg      = Color3.fromRGB(10, 10, 12),
+	Panel   = Color3.fromRGB(18, 18, 22),
+	Panel2  = Color3.fromRGB(24, 24, 30),
+	Border  = Color3.fromRGB(42, 42, 50),
+	Text    = Color3.fromRGB(235, 235, 240),
+	Dim     = Color3.fromRGB(140, 140, 150),
+	Accent  = Color3.fromRGB(115, 135, 255),
+	Danger  = Color3.fromRGB(210, 75, 90),
 }
 
-----------------------------------------------------------------
--- State
-----------------------------------------------------------------
 local State = {
-	Open      = false,
-	Tab       = "ESP",
-	Hue       = 0,
-	RGBConn   = nil,
-	Dragging  = false,
+	Open = false,
+	Tab = "ESP",
+	Hue = 0,
+	RGBConn = nil,
+	Dragging = false,
 	DragStart = nil,
-	StartPos  = nil,
-	Blur      = nil,
+	StartPos = nil,
+	Blur = nil,
 }
 
 local Settings = {
-	ESP        = {Enabled=false, Box=true, Name=true, Dist=true, Team=true, Max=500},
-	Aim        = {Enabled=false, FOV=110, Smooth=0.22, Team=true, Visible=true},
-	NPC        = {Enabled=false, Lock=false, Range=75},
-	Hitbox     = {Enabled=false, Show=true, Scale=1},
-	Movement   = {Speed=16, Jump=50, Fly=false, Noclip=false},
-	Crosshair  = {Enabled=true, Size=11, Thick=1, Gap=4, Color=Color3.new(1,1,1)},
-	Performance= {Low=false, Rate=60},
-	UI         = {Scale=1, Blur=true},
+	ESP         = {Enabled=false, Box=true, Name=true, Dist=true, Team=true, Max=500},
+	Aim         = {Enabled=false, FOV=110, Smooth=0.22, Team=true, Visible=true},
+	NPC         = {Enabled=false, Lock=false, Range=75},
+	Hitbox      = {Enabled=false, Show=true, Scale=1},
+	Movement    = {Speed=16, Jump=50, Fly=false, Noclip=false},
+	Crosshair   = {Enabled=true, Size=11, Thick=1, Gap=4},
+	Performance = {Low=false, Rate=60},
+	UI          = {Blur=true},
 }
 
-----------------------------------------------------------------
--- Helpers
-----------------------------------------------------------------
-local function New(class, props, children)
+local function New(class, props)
 	local i = Instance.new(class)
 	for k,v in pairs(props or {}) do i[k] = v end
-	for _,c in ipairs(children or {}) do c.Parent = i end
 	return i
 end
 
-local function Tw(obj, goals, t, style)
-	local info = TweenInfo.new(t or CFG.AnimSpeed, style or Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-	local tw = TweenService:Create(obj, info, goals)
+local function Tw(obj, goals, t)
+	local tw = TweenService:Create(obj, TweenInfo.new(t or CFG.AnimSpeed, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), goals)
 	tw:Play()
 	return tw
 end
 
-local function SoftShadow(parent, radius, alpha)
-	return New("ImageLabel", {
-		Name = "Shadow",
-		BackgroundTransparency = 1,
-		Image = "rbxassetid://6014261993",
-		ImageColor3 = Color3.new(0,0,0),
-		ImageTransparency = alpha or 0.55,
-		ScaleType = Enum.ScaleType.Slice,
-		SliceCenter = Rect.new(49,49,450,450),
-		Size = UDim2.new(1, radius*2, 1, radius*2),
-		Position = UDim2.new(0, -radius, 0, -radius),
-		ZIndex = parent.ZIndex - 1,
-		Parent = parent,
-	})
-end
-
 ----------------------------------------------------------------
--- Root GUI
+-- GUI root
 ----------------------------------------------------------------
 local Gui = New("ScreenGui", {
 	Name = "UniversalPremium",
@@ -104,43 +83,57 @@ local Gui = New("ScreenGui", {
 
 local Main = New("Frame", {
 	Name = "Main",
-	Size = UDim2.fromOffset(700, 455),
+	Size = UDim2.fromOffset(720, 470),
 	Position = UDim2.fromScale(0.5, 0.5),
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	BackgroundColor3 = C.Panel,
-	BackgroundTransparency = 0.05,
+	BackgroundTransparency = 0.04,
 	BorderSizePixel = 0,
 	ClipsDescendants = true,
 	Visible = false,
 	Parent = Gui,
 })
-New("UICorner", {CornerRadius = UDim.new(0, 13)}, {Parent = Main})
-New("UIStroke", {Color = C.Border, Thickness = 1, Transparency = 0.3}, {Parent = Main})
-SoftShadow(Main, 16, 0.55)
+New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = Main})
+New("UIStroke", {Color = C.Border, Thickness = 1, Transparency = 0.25, Parent = Main})
+
+-- soft shadow
+local sh = New("ImageLabel", {
+	Name = "Shadow",
+	BackgroundTransparency = 1,
+	Image = "rbxassetid://6014261993",
+	ImageColor3 = Color3.new(0,0,0),
+	ImageTransparency = 0.5,
+	ScaleType = Enum.ScaleType.Slice,
+	SliceCenter = Rect.new(49,49,450,450),
+	Size = UDim2.new(1, 32, 1, 32),
+	Position = UDim2.fromOffset(-16, -16),
+	ZIndex = 0,
+	Parent = Main,
+})
 
 ----------------------------------------------------------------
--- Title bar
+-- Title
 ----------------------------------------------------------------
 local TitleBar = New("Frame", {
-	Size = UDim2.new(1, 0, 0, 40),
+	Size = UDim2.new(1, 0, 0, 38),
 	BackgroundColor3 = C.Bg,
-	BackgroundTransparency = 0.2,
+	BackgroundTransparency = 0.15,
 	BorderSizePixel = 0,
 	Parent = Main,
 })
-New("UICorner", {CornerRadius = UDim.new(0, 13)}, {Parent = TitleBar})
+New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = TitleBar})
 New("Frame", {
-	Size = UDim2.new(1, 0, 0, 12),
-	Position = UDim2.new(0, 0, 1, -12),
+	Size = UDim2.new(1, 0, 0, 10),
+	Position = UDim2.new(0, 0, 1, -10),
 	BackgroundColor3 = C.Bg,
-	BackgroundTransparency = 0.2,
+	BackgroundTransparency = 0.15,
 	BorderSizePixel = 0,
 	Parent = TitleBar,
 })
 
 New("TextLabel", {
-	Size = UDim2.new(0, 260, 1, 0),
-	Position = UDim2.fromOffset(16, 0),
+	Size = UDim2.new(0, 280, 1, 0),
+	Position = UDim2.fromOffset(14, 0),
 	BackgroundTransparency = 1,
 	Text = "UNIVERSAL  ·  PREMIUM",
 	Font = Enum.Font.GothamMedium,
@@ -149,80 +142,71 @@ New("TextLabel", {
 	TextXAlignment = Enum.TextXAlignment.Left,
 	Parent = TitleBar,
 })
-
 New("TextLabel", {
-	Size = UDim2.new(0, 70, 1, 0),
-	Position = UDim2.fromOffset(195, 0),
+	Size = UDim2.new(0, 50, 1, 0),
+	Position = UDim2.fromOffset(200, 0),
 	BackgroundTransparency = 1,
-	Text = "v2.4",
+	Text = "v2.5",
 	Font = Enum.Font.Gotham,
-	TextSize = 12,
+	TextSize = 11,
 	TextColor3 = C.Dim,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	Parent = TitleBar,
 })
 
-local function MakeDot(name, x, color, cb)
+local function Dot(x, color, cb)
 	local b = New("TextButton", {
-		Name = name,
-		Size = UDim2.fromOffset(26, 26),
+		Size = UDim2.fromOffset(24, 24),
 		Position = UDim2.new(1, x, 0.5, 0),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundColor3 = color,
-		BackgroundTransparency = 0.65,
+		BackgroundTransparency = 0.55,
 		Text = "",
 		AutoButtonColor = false,
 		Parent = TitleBar,
 	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0)}, {Parent = b})
-	b.MouseEnter:Connect(function() Tw(b, {BackgroundTransparency = 0.3}, 0.12) end)
-	b.MouseLeave:Connect(function() Tw(b, {BackgroundTransparency = 0.65}, 0.12) end)
+	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = b})
+	b.MouseEnter:Connect(function() Tw(b, {BackgroundTransparency = 0.2}, 0.1) end)
+	b.MouseLeave:Connect(function() Tw(b, {BackgroundTransparency = 0.55}, 0.1) end)
 	b.MouseButton1Click:Connect(cb)
-	return b
 end
 
-MakeDot("Close", -20, C.Danger, function() Toggle(false) end)
-MakeDot("Min", -50, C.Dim, function()
-	Tw(Main, {Size = UDim2.fromOffset(700, 40)}, 0.28)
-end)
+Dot(-18, C.Danger, function() Toggle(false) end)
+Dot(-46, C.Dim, function() Tw(Main, {Size = UDim2.fromOffset(720, 38)}, 0.25) end)
 
-TitleBar.InputBegan:Connect(function(inp)
-	if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+-- drag
+TitleBar.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 then
 		State.Dragging = true
-		State.DragStart = inp.Position
+		State.DragStart = i.Position
 		State.StartPos = Main.Position
 	end
 end)
-TitleBar.InputEnded:Connect(function(inp)
-	if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-		State.Dragging = false
-	end
+TitleBar.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 then State.Dragging = false end
 end)
-UserInputService.InputChanged:Connect(function(inp)
-	if State.Dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
-		local d = inp.Position - State.DragStart
-		Main.Position = UDim2.new(
-			State.StartPos.X.Scale, State.StartPos.X.Offset + d.X,
-			State.StartPos.Y.Scale, State.StartPos.Y.Offset + d.Y
-		)
+UserInputService.InputChanged:Connect(function(i)
+	if State.Dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+		local d = i.Position - State.DragStart
+		Main.Position = UDim2.new(State.StartPos.X.Scale, State.StartPos.X.Offset + d.X, State.StartPos.Y.Scale, State.StartPos.Y.Offset + d.Y)
 	end
 end)
 
 ----------------------------------------------------------------
--- Sidebar + Content
+-- Sidebar
 ----------------------------------------------------------------
 local Side = New("Frame", {
-	Size = UDim2.new(0, 160, 1, -40),
-	Position = UDim2.fromOffset(0, 40),
+	Size = UDim2.new(0, 148, 1, -38),
+	Position = UDim2.fromOffset(0, 38),
 	BackgroundColor3 = C.Bg,
-	BackgroundTransparency = 0.3,
+	BackgroundTransparency = 0.25,
 	BorderSizePixel = 0,
 	Parent = Main,
 })
 
 local SideList = New("ScrollingFrame", {
-	Size = UDim2.new(1, -6, 1, -10),
-	Position = UDim2.fromOffset(3, 6),
+	Size = UDim2.new(1, -4, 1, -8),
+	Position = UDim2.fromOffset(2, 4),
 	BackgroundTransparency = 1,
 	BorderSizePixel = 0,
 	ScrollBarThickness = 2,
@@ -231,23 +215,22 @@ local SideList = New("ScrollingFrame", {
 	AutomaticCanvasSize = Enum.AutomaticSize.Y,
 	Parent = Side,
 })
-New("UIListLayout", {Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder}, {Parent = SideList})
+New("UIListLayout", {Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = SideList})
 
 local Content = New("Frame", {
-	Size = UDim2.new(1, -168, 1, -48),
-	Position = UDim2.fromOffset(164, 44),
+	Size = UDim2.new(1, -156, 1, -46),
+	Position = UDim2.fromOffset(152, 42),
 	BackgroundTransparency = 1,
 	ClipsDescendants = true,
 	Parent = Main,
 })
 
-local Tabs = {}
-local TabBtns = {}
+local Tabs, TabBtns = {}, {}
 
-local function MakeTabBtn(id, label, order)
+local function MakeTab(id, label, order)
 	local btn = New("TextButton", {
 		Name = id,
-		Size = UDim2.new(1, -2, 0, 34),
+		Size = UDim2.new(1, 0, 0, 32),
 		BackgroundColor3 = C.Panel2,
 		BackgroundTransparency = 1,
 		Text = "",
@@ -255,23 +238,22 @@ local function MakeTabBtn(id, label, order)
 		LayoutOrder = order,
 		Parent = SideList,
 	})
-	New("UICorner", {CornerRadius = UDim.new(0, 7)}, {Parent = btn})
+	New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = btn})
 
 	local ind = New("Frame", {
-		Name = "Ind",
-		Size = UDim2.fromOffset(3, 16),
-		Position = UDim2.new(0, 5, 0.5, 0),
+		Size = UDim2.fromOffset(3, 14),
+		Position = UDim2.new(0, 4, 0.5, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
 		BackgroundColor3 = C.Accent,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		Parent = btn,
 	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0)}, {Parent = ind})
+	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = ind})
 
 	local txt = New("TextLabel", {
-		Size = UDim2.new(1, -24, 1, 0),
-		Position = UDim2.fromOffset(16, 0),
+		Size = UDim2.new(1, -20, 1, 0),
+		Position = UDim2.fromOffset(14, 0),
 		BackgroundTransparency = 1,
 		Text = label,
 		Font = Enum.Font.Gotham,
@@ -283,34 +265,33 @@ local function MakeTabBtn(id, label, order)
 
 	btn.MouseEnter:Connect(function()
 		if State.Tab ~= id then
-			Tw(btn, {BackgroundTransparency = 0.65}, 0.12)
-			Tw(txt, {TextColor3 = C.Text}, 0.12)
+			Tw(btn, {BackgroundTransparency = 0.6}, 0.1)
+			Tw(txt, {TextColor3 = C.Text}, 0.1)
 		end
 	end)
 	btn.MouseLeave:Connect(function()
 		if State.Tab ~= id then
-			Tw(btn, {BackgroundTransparency = 1}, 0.12)
-			Tw(txt, {TextColor3 = C.Dim}, 0.12)
+			Tw(btn, {BackgroundTransparency = 1}, 0.1)
+			Tw(txt, {TextColor3 = C.Dim}, 0.1)
 		end
 	end)
 	btn.MouseButton1Click:Connect(function() SwitchTab(id) end)
 
-	TabBtns[id] = {Btn = btn, Ind = ind, Txt = txt}
-	return btn
+	TabBtns[id] = {Btn=btn, Ind=ind, Txt=txt}
 end
 
-MakeTabBtn("ESP", "ESP Visualization", 1)
-MakeTabBtn("Aim", "Aim Trainer", 2)
-MakeTabBtn("NPC", "NPC Lock", 3)
-MakeTabBtn("Hitbox", "Hitbox Visual", 4)
-MakeTabBtn("Movement", "Movement", 5)
-MakeTabBtn("Crosshair", "Crosshair", 6)
-MakeTabBtn("Performance", "Performance", 7)
-MakeTabBtn("UI", "UI Customize", 8)
-MakeTabBtn("Config", "Configuration", 9)
+MakeTab("ESP", "ESP", 1)
+MakeTab("Aim", "Aim", 2)
+MakeTab("NPC", "NPC Lock", 3)
+MakeTab("Hitbox", "Hitbox", 4)
+MakeTab("Movement", "Movement", 5)
+MakeTab("Crosshair", "Crosshair", 6)
+MakeTab("Performance", "Perf", 7)
+MakeTab("UI", "UI", 8)
+MakeTab("Config", "Config", 9)
 
 ----------------------------------------------------------------
--- Panel builders
+-- Panel helpers
 ----------------------------------------------------------------
 local function MakePanel(name)
 	local f = New("ScrollingFrame", {
@@ -325,130 +306,113 @@ local function MakePanel(name)
 		Visible = false,
 		Parent = Content,
 	})
-	New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, {Parent = f})
-	New("UIPadding", {
-		PaddingTop = UDim.new(0, 4),
-		PaddingLeft = UDim.new(0, 4),
-		PaddingRight = UDim.new(0, 8),
-		PaddingBottom = UDim.new(0, 10),
-	}, {Parent = f})
+	New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = f})
+	New("UIPadding", {PaddingTop=UDim.new(0,2), PaddingLeft=UDim.new(0,2), PaddingRight=UDim.new(0,6), PaddingBottom=UDim.new(0,8), Parent = f})
 	Tabs[name] = f
 	return f
 end
 
 local function Section(parent, title, order)
-	local h = New("Frame", {
-		Size = UDim2.new(1, 0, 0, 24),
-		BackgroundTransparency = 1,
-		LayoutOrder = order,
-		Parent = parent,
-	})
+	local h = New("Frame", {Size = UDim2.new(1,0,0,22), BackgroundTransparency=1, LayoutOrder=order, Parent=parent})
 	New("TextLabel", {
-		Size = UDim2.fromScale(1, 1),
+		Size = UDim2.fromScale(1,1),
 		BackgroundTransparency = 1,
 		Text = title,
 		Font = Enum.Font.GothamMedium,
-		TextSize = 12,
+		TextSize = 11,
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = h,
 	})
-	return h
 end
 
 local function ToggleRow(parent, label, key, subkey, order)
 	local row = New("Frame", {
-		Size = UDim2.new(1, 0, 0, 36),
+		Size = UDim2.new(1, 0, 0, 34),
 		BackgroundColor3 = C.Panel2,
-		BackgroundTransparency = 0.4,
+		BackgroundTransparency = 0.35,
 		BorderSizePixel = 0,
 		LayoutOrder = order,
 		Parent = parent,
 	})
-	New("UICorner", {CornerRadius = UDim.new(0, 8)}, {Parent = row})
+	New("UICorner", {CornerRadius = UDim.new(0, 7), Parent = row})
 
 	New("TextLabel", {
-		Size = UDim2.new(1, -70, 1, 0),
-		Position = UDim2.fromOffset(12, 0),
+		Size = UDim2.new(1, -64, 1, 0),
+		Position = UDim2.fromOffset(10, 0),
 		BackgroundTransparency = 1,
 		Text = label,
 		Font = Enum.Font.Gotham,
-		TextSize = 13,
+		TextSize = 12,
 		TextColor3 = C.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = row,
 	})
 
 	local track = New("Frame", {
-		Size = UDim2.fromOffset(40, 20),
-		Position = UDim2.new(1, -52, 0.5, 0),
+		Size = UDim2.fromOffset(36, 18),
+		Position = UDim2.new(1, -46, 0.5, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
 		BackgroundColor3 = C.Border,
 		BorderSizePixel = 0,
 		Parent = row,
 	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0)}, {Parent = track})
+	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = track})
 
 	local knob = New("Frame", {
-		Size = UDim2.fromOffset(16, 16),
+		Size = UDim2.fromOffset(14, 14),
 		Position = UDim2.fromOffset(2, 2),
 		BackgroundColor3 = C.Text,
 		BorderSizePixel = 0,
 		Parent = track,
 	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0)}, {Parent = knob})
+	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = knob})
 
 	local function refresh()
 		local on = Settings[key][subkey]
-		Tw(track, {BackgroundColor3 = on and C.Accent or C.Border}, 0.18)
-		Tw(knob, {Position = on and UDim2.fromOffset(22, 2) or UDim2.fromOffset(2, 2)}, 0.18)
+		Tw(track, {BackgroundColor3 = on and C.Accent or C.Border}, 0.15)
+		Tw(knob, {Position = on and UDim2.fromOffset(20, 2) or UDim2.fromOffset(2, 2)}, 0.15)
 	end
 	refresh()
 
-	local btn = New("TextButton", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Text = "",
-		Parent = row,
-	})
-	btn.MouseButton1Click:Connect(function()
+	local hit = New("TextButton", {Size = UDim2.fromScale(1,1), BackgroundTransparency=1, Text="", Parent=row})
+	hit.MouseButton1Click:Connect(function()
 		Settings[key][subkey] = not Settings[key][subkey]
 		refresh()
 	end)
-	return row
 end
 
 local function SliderRow(parent, label, key, subkey, min, max, order)
 	local row = New("Frame", {
-		Size = UDim2.new(1, 0, 0, 52),
+		Size = UDim2.new(1, 0, 0, 48),
 		BackgroundColor3 = C.Panel2,
-		BackgroundTransparency = 0.4,
+		BackgroundTransparency = 0.35,
 		BorderSizePixel = 0,
 		LayoutOrder = order,
 		Parent = parent,
 	})
-	New("UICorner", {CornerRadius = UDim.new(0, 8)}, {Parent = row})
+	New("UICorner", {CornerRadius = UDim.new(0, 7), Parent = row})
 
-	local valLabel = New("TextLabel", {
-		Size = UDim2.new(1, -24, 0, 20),
-		Position = UDim2.fromOffset(12, 6),
+	local val = New("TextLabel", {
+		Size = UDim2.new(1, -20, 0, 18),
+		Position = UDim2.fromOffset(10, 4),
 		BackgroundTransparency = 1,
 		Text = label .. ": " .. tostring(Settings[key][subkey]),
 		Font = Enum.Font.Gotham,
-		TextSize = 12,
+		TextSize = 11,
 		TextColor3 = C.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = row,
 	})
 
 	local bar = New("Frame", {
-		Size = UDim2.new(1, -24, 0, 6),
-		Position = UDim2.new(0, 12, 1, -16),
+		Size = UDim2.new(1, -20, 0, 5),
+		Position = UDim2.new(0, 10, 1, -14),
 		BackgroundColor3 = C.Border,
 		BorderSizePixel = 0,
 		Parent = row,
 	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0)}, {Parent = bar})
+	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = bar})
 
 	local fill = New("Frame", {
 		Size = UDim2.new((Settings[key][subkey]-min)/(max-min), 0, 1, 0),
@@ -456,112 +420,106 @@ local function SliderRow(parent, label, key, subkey, min, max, order)
 		BorderSizePixel = 0,
 		Parent = bar,
 	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0)}, {Parent = fill})
+	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = fill})
 
-	local hit = New("TextButton", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Text = "",
-		Parent = bar,
-	})
+	local hit = New("TextButton", {Size = UDim2.fromScale(1,1), BackgroundTransparency=1, Text="", Parent=bar})
 	hit.MouseButton1Click:Connect(function()
 		local mx = UserInputService:GetMouseLocation().X
 		local abs = bar.AbsolutePosition.X
-		local size = bar.AbsoluteSize.X
-		local pct = math.clamp((mx - abs) / size, 0, 1)
+		local sz = bar.AbsoluteSize.X
+		local pct = math.clamp((mx - abs) / sz, 0, 1)
 		local v = math.floor(min + pct * (max - min) + 0.5)
 		Settings[key][subkey] = v
 		fill.Size = UDim2.new(pct, 0, 1, 0)
-		valLabel.Text = label .. ": " .. v
+		val.Text = label .. ": " .. v
 	end)
-	return row
 end
 
 ----------------------------------------------------------------
 -- Build panels
 ----------------------------------------------------------------
-local pESP = MakePanel("ESP")
-Section(pESP, "ESP VISUALIZATION", 1)
-ToggleRow(pESP, "Master Toggle", "ESP", "Enabled", 2)
-ToggleRow(pESP, "Bounding Box", "ESP", "Box", 3)
-ToggleRow(pESP, "Name Tags", "ESP", "Name", 4)
-ToggleRow(pESP, "Distance", "ESP", "Dist", 5)
-ToggleRow(pESP, "Team Check", "ESP", "Team", 6)
-SliderRow(pESP, "Max Distance", "ESP", "Max", 50, 2000, 7)
+local p = MakePanel("ESP")
+Section(p, "ESP VISUALIZATION", 1)
+ToggleRow(p, "Master Toggle", "ESP", "Enabled", 2)
+ToggleRow(p, "Bounding Box", "ESP", "Box", 3)
+ToggleRow(p, "Name Tags", "ESP", "Name", 4)
+ToggleRow(p, "Distance", "ESP", "Dist", 5)
+ToggleRow(p, "Team Check", "ESP", "Team", 6)
+SliderRow(p, "Max Distance", "ESP", "Max", 50, 2000, 7)
 
-local pAim = MakePanel("Aim")
-Section(pAim, "AIM TRAINER (PLACEHOLDER)", 1)
-ToggleRow(pAim, "Enabled", "Aim", "Enabled", 2)
-SliderRow(pAim, "FOV", "Aim", "FOV", 30, 300, 3)
-SliderRow(pAim, "Smoothness", "Aim", "Smooth", 0, 1, 4)
-ToggleRow(pAim, "Team Check", "Aim", "Team", 5)
-ToggleRow(pAim, "Visible Check", "Aim", "Visible", 6)
+p = MakePanel("Aim")
+Section(p, "AIM TRAINER (PLACEHOLDER)", 1)
+ToggleRow(p, "Enabled", "Aim", "Enabled", 2)
+SliderRow(p, "FOV", "Aim", "FOV", 30, 300, 3)
+SliderRow(p, "Smoothness", "Aim", "Smooth", 0, 1, 4)
+ToggleRow(p, "Team Check", "Aim", "Team", 5)
+ToggleRow(p, "Visible Check", "Aim", "Visible", 6)
 
-local pNPC = MakePanel("NPC")
-Section(pNPC, "NPC LOCK (AUTHORIZED / VISUAL)", 1)
-ToggleRow(pNPC, "Enabled", "NPC", "Enabled", 2)
-ToggleRow(pNPC, "Lock", "NPC", "Lock", 3)
-SliderRow(pNPC, "Range", "NPC", "Range", 10, 200, 4)
+p = MakePanel("NPC")
+Section(p, "NPC LOCK (VISUAL ONLY)", 1)
+ToggleRow(p, "Enabled", "NPC", "Enabled", 2)
+ToggleRow(p, "Lock", "NPC", "Lock", 3)
+SliderRow(p, "Range", "NPC", "Range", 10, 200, 4)
 
-local pHit = MakePanel("Hitbox")
-Section(pHit, "HITBOX VISUALIZATION", 1)
-ToggleRow(pHit, "Enabled", "Hitbox", "Enabled", 2)
-ToggleRow(pHit, "Show Boxes", "Hitbox", "Show", 3)
-SliderRow(pHit, "Scale", "Hitbox", "Scale", 0.5, 3, 4)
+p = MakePanel("Hitbox")
+Section(p, "HITBOX VISUAL", 1)
+ToggleRow(p, "Enabled", "Hitbox", "Enabled", 2)
+ToggleRow(p, "Show Boxes", "Hitbox", "Show", 3)
+SliderRow(p, "Scale", "Hitbox", "Scale", 0.5, 3, 4)
 
-local pMove = MakePanel("Movement")
-Section(pMove, "MOVEMENT", 1)
-SliderRow(pMove, "WalkSpeed", "Movement", "Speed", 8, 100, 2)
-SliderRow(pMove, "JumpPower", "Movement", "Jump", 20, 150, 3)
-ToggleRow(pMove, "Fly (visual)", "Movement", "Fly", 4)
-ToggleRow(pMove, "Noclip (visual)", "Movement", "Noclip", 5)
+p = MakePanel("Movement")
+Section(p, "MOVEMENT", 1)
+SliderRow(p, "WalkSpeed", "Movement", "Speed", 8, 100, 2)
+SliderRow(p, "JumpPower", "Movement", "Jump", 20, 150, 3)
+ToggleRow(p, "Fly (visual)", "Movement", "Fly", 4)
+ToggleRow(p, "Noclip (visual)", "Movement", "Noclip", 5)
 
-local pCross = MakePanel("Crosshair")
-Section(pCross, "CROSSHAIR", 1)
-ToggleRow(pCross, "Enabled", "Crosshair", "Enabled", 2)
-SliderRow(pCross, "Size", "Crosshair", "Size", 4, 30, 3)
-SliderRow(pCross, "Thickness", "Crosshair", "Thick", 1, 6, 4)
-SliderRow(pCross, "Gap", "Crosshair", "Gap", 0, 20, 5)
+p = MakePanel("Crosshair")
+Section(p, "CROSSHAIR", 1)
+ToggleRow(p, "Enabled", "Crosshair", "Enabled", 2)
+SliderRow(p, "Size", "Crosshair", "Size", 4, 30, 3)
+SliderRow(p, "Thickness", "Crosshair", "Thick", 1, 6, 4)
+SliderRow(p, "Gap", "Crosshair", "Gap", 0, 20, 5)
 
-local pPerf = MakePanel("Performance")
-Section(pPerf, "PERFORMANCE", 1)
-ToggleRow(pPerf, "Low-End Mode", "Performance", "Low", 2)
-SliderRow(pPerf, "Update Rate", "Performance", "Rate", 15, 120, 3)
+p = MakePanel("Performance")
+Section(p, "PERFORMANCE", 1)
+ToggleRow(p, "Low-End Mode", "Performance", "Low", 2)
+SliderRow(p, "Update Rate", "Performance", "Rate", 15, 120, 3)
 
-local pUI = MakePanel("UI")
-Section(pUI, "INTERFACE", 1)
-ToggleRow(pUI, "Blur Background", "UI", "Blur", 2)
+p = MakePanel("UI")
+Section(p, "INTERFACE", 1)
+ToggleRow(p, "Blur Background", "UI", "Blur", 2)
 
-local pCfg = MakePanel("Config")
-Section(pCfg, "CONFIGURATION", 1)
+p = MakePanel("Config")
+Section(p, "CONFIGURATION", 1)
 
 local rgbRow = New("Frame", {
-	Size = UDim2.new(1, 0, 0, 40),
+	Size = UDim2.new(1, 0, 0, 36),
 	BackgroundColor3 = C.Panel2,
-	BackgroundTransparency = 0.4,
+	BackgroundTransparency = 0.35,
 	BorderSizePixel = 0,
 	LayoutOrder = 2,
-	Parent = pCfg,
+	Parent = p,
 })
-New("UICorner", {CornerRadius = UDim.new(0, 8)}, {Parent = rgbRow})
+New("UICorner", {CornerRadius = UDim.new(0, 7), Parent = rgbRow})
 New("TextLabel", {
-	Size = UDim2.new(1, -80, 1, 0),
-	Position = UDim2.fromOffset(12, 0),
+	Size = UDim2.new(1, -78, 1, 0),
+	Position = UDim2.fromOffset(10, 0),
 	BackgroundTransparency = 1,
 	Text = "Rainbow RGB Theme",
 	Font = Enum.Font.Gotham,
-	TextSize = 13,
+	TextSize = 12,
 	TextColor3 = C.Text,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	Parent = rgbRow,
 })
 
 local rgbBtn = New("TextButton", {
-	Size = UDim2.fromOffset(70, 26),
-	Position = UDim2.new(1, -82, 0.5, 0),
+	Size = UDim2.fromOffset(64, 24),
+	Position = UDim2.new(1, -74, 0.5, 0),
 	AnchorPoint = Vector2.new(0, 0.5),
 	BackgroundColor3 = C.Accent,
-	BackgroundTransparency = 0.3,
+	BackgroundTransparency = 0.25,
 	Text = "OFF",
 	Font = Enum.Font.GothamMedium,
 	TextSize = 11,
@@ -569,10 +527,10 @@ local rgbBtn = New("TextButton", {
 	AutoButtonColor = false,
 	Parent = rgbRow,
 })
-New("UICorner", {CornerRadius = UDim.new(0, 6)}, {Parent = rgbBtn})
+New("UICorner", {CornerRadius = UDim.new(0, 5), Parent = rgbBtn})
 
 ----------------------------------------------------------------
--- Tab switch + open/close
+-- Logic
 ----------------------------------------------------------------
 function SwitchTab(id)
 	if State.Tab == id then return end
@@ -580,21 +538,21 @@ function SwitchTab(id)
 	State.Tab = id
 
 	if TabBtns[old] then
-		Tw(TabBtns[old].Btn, {BackgroundTransparency = 1}, 0.18)
-		Tw(TabBtns[old].Ind, {BackgroundTransparency = 1}, 0.18)
-		Tw(TabBtns[old].Txt, {TextColor3 = C.Dim}, 0.18)
+		Tw(TabBtns[old].Btn, {BackgroundTransparency = 1}, 0.15)
+		Tw(TabBtns[old].Ind, {BackgroundTransparency = 1}, 0.15)
+		Tw(TabBtns[old].Txt, {TextColor3 = C.Dim}, 0.15)
 	end
 	if TabBtns[id] then
-		Tw(TabBtns[id].Btn, {BackgroundTransparency = 0.45}, 0.18)
-		Tw(TabBtns[id].Ind, {BackgroundTransparency = 0}, 0.18)
-		Tw(TabBtns[id].Txt, {TextColor3 = C.Text}, 0.18)
+		Tw(TabBtns[id].Btn, {BackgroundTransparency = 0.4}, 0.15)
+		Tw(TabBtns[id].Ind, {BackgroundTransparency = 0}, 0.15)
+		Tw(TabBtns[id].Txt, {TextColor3 = C.Text}, 0.15)
 	end
 
 	if Tabs[old] then Tabs[old].Visible = false end
 	if Tabs[id] then
 		Tabs[id].Visible = true
-		Tabs[id].Position = UDim2.new(0, 12, 0, 0)
-		Tw(Tabs[id], {Position = UDim2.new(0, 0, 0, 0)}, 0.22)
+		Tabs[id].Position = UDim2.fromOffset(8, 0)
+		Tw(Tabs[id], {Position = UDim2.fromOffset(0, 0)}, 0.18)
 	end
 end
 
@@ -602,29 +560,23 @@ function Toggle(open)
 	State.Open = open
 	if open then
 		Main.Visible = true
-		Main.Size = UDim2.fromOffset(700, 20)
+		Main.Size = UDim2.fromOffset(720, 20)
 		Main.BackgroundTransparency = 1
-		Tw(Main, {Size = UDim2.fromOffset(700, 455), BackgroundTransparency = 0.05}, 0.32)
-
+		Tw(Main, {Size = UDim2.fromOffset(720, 470), BackgroundTransparency = 0.04}, 0.28)
 		if Settings.UI.Blur then
 			if not State.Blur then
 				State.Blur = New("BlurEffect", {Size = 0, Parent = Lighting})
 			end
-			Tw(State.Blur, {Size = 12}, 0.35)
+			Tw(State.Blur, {Size = 10}, 0.3)
 		end
 	else
-		Tw(Main, {Size = UDim2.fromOffset(700, 20), BackgroundTransparency = 1}, 0.25).Completed:Connect(function()
+		Tw(Main, {Size = UDim2.fromOffset(720, 20), BackgroundTransparency = 1}, 0.22).Completed:Connect(function()
 			Main.Visible = false
 		end)
-		if State.Blur then
-			Tw(State.Blur, {Size = 0}, 0.25)
-		end
+		if State.Blur then Tw(State.Blur, {Size = 0}, 0.2) end
 	end
 end
 
-----------------------------------------------------------------
--- RGB mode
-----------------------------------------------------------------
 local function SetRGB(on)
 	if on then
 		CFG.Theme = "RGB"
@@ -632,23 +584,18 @@ local function SetRGB(on)
 		if State.RGBConn then State.RGBConn:Disconnect() end
 		State.RGBConn = RunService.RenderStepped:Connect(function(dt)
 			State.Hue = (State.Hue + dt * CFG.RGBSpeed) % 1
-			local col = Color3.fromHSV(State.Hue, 0.7, 1)
+			local col = Color3.fromHSV(State.Hue, 0.65, 1)
 			C.Accent = col
 			for _, t in pairs(TabBtns) do
-				if t.Ind.BackgroundTransparency < 0.5 then
-					t.Ind.BackgroundColor3 = col
-				end
+				if t.Ind.BackgroundTransparency < 0.5 then t.Ind.BackgroundColor3 = col end
 			end
 			rgbBtn.BackgroundColor3 = col
 		end)
 	else
 		CFG.Theme = "Dark"
 		rgbBtn.Text = "OFF"
-		if State.RGBConn then
-			State.RGBConn:Disconnect()
-			State.RGBConn = nil
-		end
-		C.Accent = Color3.fromRGB(118, 138, 255)
+		if State.RGBConn then State.RGBConn:Disconnect() State.RGBConn = nil end
+		C.Accent = Color3.fromRGB(115, 135, 255)
 		rgbBtn.BackgroundColor3 = C.Accent
 	end
 end
@@ -657,9 +604,6 @@ rgbBtn.MouseButton1Click:Connect(function()
 	SetRGB(CFG.Theme ~= "RGB")
 end)
 
-----------------------------------------------------------------
--- Input + init
-----------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(inp, gp)
 	if gp then return end
 	if inp.KeyCode == CFG.OpenKey then
@@ -667,5 +611,7 @@ UserInputService.InputBegan:Connect(function(inp, gp)
 	end
 end)
 
+-- start clean
 SwitchTab("ESP")
-print("[UniversalPremium] loaded — RightShift to toggle")
+Toggle(true) -- open immediately so you see it loaded
+print("[UniversalPremium v2.5] loaded clean — RightShift to toggle")
