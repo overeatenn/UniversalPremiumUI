@@ -1,4 +1,4 @@
-# UniversalPremiumUI v4.1
+# UniversalPremiumUI v4.2
 
 Multi-module Novoline-inspired Roblox UI shell.
 
@@ -7,21 +7,11 @@ Multi-module Novoline-inspired Roblox UI shell.
 loadstring(game:HttpGet("https://raw.githubusercontent.com/overeatenn/UniversalPremiumUI/main/UniversalPremiumUI.lua"))()
 ```
 
-## Structure
-```
-src/
-  Theme.lua
-  State.lua
-  Components.lua
-  Keybinds.lua
-  Main.lua
-  Pages/
-    Home.lua
-    Commands.lua
-    Players.lua
-    Scripts.lua
-    Settings.lua
-Loader.lua
-```
+## v4.2 changes
+- Larger panels and readable typography
+- Consistent spacing and corner radii
+- Stronger bottom nav with clear active state
+- Bigger toggles and keybind controls
+- Refined shadows and contrast
 
-RightShift toggles UI. Keybinds support Toggle / Hold / Press modes.
+RightShift toggles UI. Keybinds support Toggle / Hold / Press.

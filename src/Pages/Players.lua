@@ -1,4 +1,4 @@
--- Players page
+-- Players v4.2
 local Players = game:GetService("Players")
 local PlayersPage = {}
 local Theme, State, Components
@@ -18,31 +18,21 @@ function PlayersPage.Build(parent)
 		Parent = parent,
 	})
 
-	local card = Components.Card(page, UDim2.fromOffset(340, 420), UDim2.fromOffset(40, 50))
-	Components.New("TextLabel", {
-		Size = UDim2.new(1, -20, 0, 22),
-		Position = UDim2.fromOffset(14, 12),
-		BackgroundTransparency = 1,
-		Text = "Players",
-		Font = Enum.Font.GothamMedium,
-		TextSize = 13,
-		TextColor3 = Theme.Text,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = card,
-	})
+	local card = Components.Card(page, UDim2.fromOffset(380, 460), UDim2.fromOffset(36, 48))
+	Components.SectionHeader(card, "Players", 16)
 
 	local list = Components.New("ScrollingFrame", {
-		Size = UDim2.new(1, -16, 1, -44),
-		Position = UDim2.fromOffset(8, 40),
+		Size = UDim2.new(1, -20, 1, -52),
+		Position = UDim2.fromOffset(10, 48),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollBarThickness = 3,
+		ScrollBarThickness = 4,
 		ScrollBarImageColor3 = Theme.Border,
 		CanvasSize = UDim2.new(0,0,0,0),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		Parent = card,
 	})
-	Components.New("UIListLayout", {Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = list})
+	Components.New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = list})
 
 	local function refresh()
 		for _, c in pairs(list:GetChildren()) do
@@ -50,21 +40,21 @@ function PlayersPage.Build(parent)
 		end
 		for i, plr in ipairs(Players:GetPlayers()) do
 			local row = Components.New("Frame", {
-				Size = UDim2.new(1, -4, 0, 36),
+				Size = UDim2.new(1, -6, 0, 40),
 				BackgroundColor3 = Theme.Card2,
-				BackgroundTransparency = 0.35,
+				BackgroundTransparency = 0.3,
 				BorderSizePixel = 0,
 				LayoutOrder = i,
 				Parent = list,
 			})
-			Components.New("UICorner", {CornerRadius = UDim.new(0, 7), Parent = row})
+			Components.New("UICorner", {CornerRadius = UDim.new(0, 9), Parent = row})
 			Components.New("TextLabel", {
-				Size = UDim2.new(1, -12, 1, 0),
-				Position = UDim2.fromOffset(10, 0),
+				Size = UDim2.new(1, -16, 1, 0),
+				Position = UDim2.fromOffset(14, 0),
 				BackgroundTransparency = 1,
 				Text = plr.DisplayName .. "  (@" .. plr.Name .. ")",
 				Font = Enum.Font.Gotham,
-				TextSize = 12,
+				TextSize = 13,
 				TextColor3 = plr == Players.LocalPlayer and Theme.Accent or Theme.Text,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				Parent = row,

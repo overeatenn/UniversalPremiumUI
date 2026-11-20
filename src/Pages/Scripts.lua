@@ -1,4 +1,4 @@
--- Scripts placeholder page
+-- Scripts v4.2
 local Scripts = {}
 local Theme, State, Components
 
@@ -17,25 +17,15 @@ function Scripts.Build(parent)
 		Parent = parent,
 	})
 
-	local card = Components.Card(page, UDim2.fromOffset(420, 210), UDim2.fromOffset(40, 80))
+	local card = Components.Card(page, UDim2.fromOffset(460, 240), UDim2.fromOffset(36, 80))
+	Components.SectionHeader(card, "Scripts", 18)
 	Components.New("TextLabel", {
-		Size = UDim2.new(1, -24, 0, 24),
-		Position = UDim2.fromOffset(16, 20),
-		BackgroundTransparency = 1,
-		Text = "Scripts",
-		Font = Enum.Font.GothamMedium,
-		TextSize = 14,
-		TextColor3 = Theme.Text,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = card,
-	})
-	Components.New("TextLabel", {
-		Size = UDim2.new(1, -24, 0, 70),
+		Size = UDim2.new(1, -32, 0, 80),
 		Position = UDim2.fromOffset(16, 56),
 		BackgroundTransparency = 1,
 		Text = "Script hub is a visual placeholder.\nThis shell is UI-only.\nLoad external scripts from your executor.",
 		Font = Enum.Font.Gotham,
-		TextSize = 12,
+		TextSize = 14,
 		TextColor3 = Theme.Dim,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Top,
