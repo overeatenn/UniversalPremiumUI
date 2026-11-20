@@ -1,12 +1,13 @@
--- UniversalPremiumUI v3.0
--- Premium dark glass rewrite · real depth · smooth motion · responsive controls
--- Visual placeholders only · no character / Humanoid code
+-- UniversalPremiumUI v4.0
+-- Novoline-inspired floating panel system + bottom nav + keybind manager
+-- Visual / UI only · placeholders for exploit features
 
 local Players          = game:GetService("Players")
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
 local Lighting         = game:GetService("Lighting")
+local HttpService      = game:GetService("HttpService")
 
 local LP = Players.LocalPlayer
 if not LP then return end
@@ -19,77 +20,101 @@ pcall(function()
 end)
 
 ----------------------------------------------------------------
--- Theme
+-- Config & Theme (Novoline dark)
 ----------------------------------------------------------------
-local CFG = {
-	OpenKey   = Enum.KeyCode.RightShift,
-	Theme     = "Dark",
-	RGBSpeed  = 0.26,
-	Anim      = 0.32,
-}
-
-local C = {
-	Bg       = Color3.fromRGB(9, 9, 11),
-	Panel    = Color3.fromRGB(16, 16, 19),
-	Panel2   = Color3.fromRGB(22, 22, 26),
-	Elevated = Color3.fromRGB(28, 28, 34),
-	Border   = Color3.fromRGB(38, 38, 46),
-	Text     = Color3.fromRGB(240, 240, 245),
-	Dim      = Color3.fromRGB(130, 130, 140),
-	Muted    = Color3.fromRGB(90, 90, 100),
-	Accent   = Color3.fromRGB(110, 130, 255),
-	Danger   = Color3.fromRGB(220, 70, 85),
+local Theme = {
+	Bg        = Color3.fromRGB(12, 12, 14),
+	Card      = Color3.fromRGB(18, 18, 22),
+	Card2     = Color3.fromRGB(24, 24, 29),
+	Elevated  = Color3.fromRGB(30, 30, 36),
+	Border    = Color3.fromRGB(42, 42, 50),
+	Text      = Color3.fromRGB(235, 235, 240),
+	Dim       = Color3.fromRGB(140, 140, 150),
+	Muted     = Color3.fromRGB(95, 95, 105),
+	Accent    = Color3.fromRGB(120, 100, 255), -- soft purple
+	Accent2   = Color3.fromRGB(80, 160, 255),
+	Success   = Color3.fromRGB(70, 200, 140),
+	Danger    = Color3.fromRGB(230, 70, 90),
+	Warn      = Color3.fromRGB(230, 170, 60),
 }
 
 local State = {
-	Open = false,
-	Tab = "ESP",
+	Open = true,
+	ActivePage = "Home",
+	Dragging = nil,
+	DragOffset = nil,
+	KeybindListening = nil,
 	Hue = 0,
+	RGB = false,
 	RGBConn = nil,
-	Dragging = false,
-	DragStart = nil,
-	StartPos = nil,
 	Blur = nil,
 }
 
-local Settings = {
-	ESP         = {Enabled=false, Box=true, Name=true, Dist=true, Team=true, Max=500},
-	Aim         = {Enabled=false, FOV=110, Smooth=0.22, Team=true, Visible=true},
-	NPC         = {Enabled=false, Lock=false, Range=75},
-	Hitbox      = {Enabled=false, Show=true, Scale=1},
-	Movement    = {Speed=16, Jump=50, Fly=false, Noclip=false},
-	Crosshair   = {Enabled=true, Size=11, Thick=1, Gap=4},
-	Performance = {Low=false, Rate=60},
-	UI          = {Blur=true},
+-- Feature state + keybind data
+-- Mode: "Toggle" | "Hold" | "Press"
+local Features = {
+	ESP = {
+		Enabled = false, Box = true, Name = true, Dist = true, Team = true, MaxDist = 500,
+		Key = Enum.KeyCode.E, Mode = "Toggle"
+	},
+	Aim = {
+		Enabled = false, FOV = 110, Smooth = 0.22, Team = true, Visible = true,
+		Key = Enum.KeyCode.Q, Mode = "Hold"
+	},
+	NPC = {
+		Enabled = false, Lock = false, Range = 75,
+		Key = Enum.KeyCode.R, Mode = "Toggle"
+	},
+	Hitbox = {
+		Enabled = false, Show = true, Scale = 1,
+		Key = Enum.KeyCode.H, Mode = "Toggle"
+	},
+	Fly = {
+		Enabled = false, Speed = 50,
+		Key = Enum.KeyCode.F, Mode = "Toggle"
+	},
+	Noclip = {
+		Enabled = false,
+		Key = Enum.KeyCode.V, Mode = "Toggle"
+	},
+	Speed = {
+		Enabled = false, Value = 16,
+		Key = Enum.KeyCode.X, Mode = "Toggle"
+	},
+	InfJump = {
+		Enabled = false,
+		Key = Enum.KeyCode.Space, Mode = "Hold"
+	},
 }
+
+local KeyNames = {}
+for _, k in pairs(Enum.KeyCode:GetEnumItems()) do
+	KeyNames[k] = k.Name
+end
 
 ----------------------------------------------------------------
 -- Helpers
 ----------------------------------------------------------------
 local function New(class, props)
 	local i = Instance.new(class)
-	for k,v in pairs(props or {}) do i[k] = v end
+	for k, v in pairs(props or {}) do i[k] = v end
 	return i
 end
 
 local function Tw(obj, goals, t, style, dir)
-	local info = TweenInfo.new(
-		t or CFG.Anim,
-		style or Enum.EasingStyle.Quart,
-		dir or Enum.EasingDirection.Out
-	)
+	local info = TweenInfo.new(t or 0.22, style or Enum.EasingStyle.Quart, dir or Enum.EasingDirection.Out)
 	local tw = TweenService:Create(obj, info, goals)
 	tw:Play()
 	return tw
 end
 
 local function SoftShadow(parent, size, alpha)
-	local s = New("ImageLabel", {
+	return New("ImageLabel", {
 		Name = "Shadow",
 		BackgroundTransparency = 1,
 		Image = "rbxassetid://6014261993",
 		ImageColor3 = Color3.new(0,0,0),
-		ImageTransparency = alpha or 0.45,
+		ImageTransparency = alpha or 0.55,
 		ScaleType = Enum.ScaleType.Slice,
 		SliceCenter = Rect.new(49,49,450,450),
 		Size = UDim2.new(1, size*2, 1, size*2),
@@ -97,7 +122,59 @@ local function SoftShadow(parent, size, alpha)
 		ZIndex = 0,
 		Parent = parent,
 	})
-	return s
+end
+
+local function MakeCard(parent, size, pos)
+	local f = New("Frame", {
+		Size = size,
+		Position = pos or UDim2.fromScale(0,0),
+		BackgroundColor3 = Theme.Card,
+		BackgroundTransparency = 0.08,
+		BorderSizePixel = 0,
+		Parent = parent,
+	})
+	New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = f})
+	New("UIStroke", {Color = Theme.Border, Thickness = 1, Transparency = 0.55, Parent = f})
+	SoftShadow(f, 14, 0.6)
+	return f
+end
+
+local function MakeToggle(parent, size, pos, initial, onChange)
+	local track = New("Frame", {
+		Size = size or UDim2.fromOffset(36, 20),
+		Position = pos or UDim2.fromScale(1, 0.5),
+		AnchorPoint = Vector2.new(1, 0.5),
+		BackgroundColor3 = initial and Theme.Accent or Theme.Border,
+		BorderSizePixel = 0,
+		Parent = parent,
+	})
+	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = track})
+	local knob = New("Frame", {
+		Size = UDim2.fromOffset(16, 16),
+		Position = initial and UDim2.fromOffset(18, 2) or UDim2.fromOffset(2, 2),
+		BackgroundColor3 = Color3.fromRGB(255,255,255),
+		BorderSizePixel = 0,
+		Parent = track,
+	})
+	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = knob})
+
+	local function set(on)
+		Tw(track, {BackgroundColor3 = on and Theme.Accent or Theme.Border}, 0.16)
+		Tw(knob, {Position = on and UDim2.fromOffset(18, 2) or UDim2.fromOffset(2, 2)}, 0.16, Enum.EasingStyle.Back)
+	end
+
+	local hit = New("TextButton", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Text = "",
+		Parent = track,
+	})
+	hit.MouseButton1Click:Connect(function()
+		local new = not (track.BackgroundColor3 == Theme.Accent)
+		set(new)
+		if onChange then onChange(new) end
+	end)
+	return {Set = set, Track = track}
 end
 
 ----------------------------------------------------------------
@@ -111,593 +188,707 @@ local Gui = New("ScreenGui", {
 	Parent = PlayerGui,
 })
 
-local Main = New("Frame", {
-	Name = "Main",
-	Size = UDim2.fromOffset(680, 440),
-	Position = UDim2.fromScale(0.5, 0.5),
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	BackgroundColor3 = C.Panel,
-	BackgroundTransparency = 0.02,
+-- Bottom navigation bar
+local Nav = New("Frame", {
+	Name = "Nav",
+	Size = UDim2.fromOffset(420, 48),
+	Position = UDim2.new(0.5, 0, 1, -28),
+	AnchorPoint = Vector2.new(0.5, 1),
+	BackgroundColor3 = Theme.Card,
+	BackgroundTransparency = 0.05,
 	BorderSizePixel = 0,
-	ClipsDescendants = true,
-	Visible = false,
 	Parent = Gui,
 })
-New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = Main})
-New("UIStroke", {
-	Color = C.Border,
-	Thickness = 1,
-	Transparency = 0.4,
-	Parent = Main,
-})
-SoftShadow(Main, 22, 0.5)
+New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = Nav})
+New("UIStroke", {Color = Theme.Border, Thickness = 1, Transparency = 0.5, Parent = Nav})
+SoftShadow(Nav, 12, 0.55)
 
--- top glass highlight
-local topGlass = New("Frame", {
-	Size = UDim2.new(1, 0, 0, 1),
-	BackgroundColor3 = Color3.fromRGB(255,255,255),
-	BackgroundTransparency = 0.92,
-	BorderSizePixel = 0,
-	ZIndex = 5,
-	Parent = Main,
+local NavLayout = New("UIListLayout", {
+	FillDirection = Enum.FillDirection.Horizontal,
+	HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	VerticalAlignment = Enum.VerticalAlignment.Center,
+	Padding = UDim.new(0, 4),
+	Parent = Nav,
 })
+New("UIPadding", {PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = Nav})
 
-----------------------------------------------------------------
--- Title bar
-----------------------------------------------------------------
-local TitleBar = New("Frame", {
-	Size = UDim2.new(1, 0, 0, 40),
-	BackgroundColor3 = C.Bg,
-	BackgroundTransparency = 0.15,
-	BorderSizePixel = 0,
-	Parent = Main,
-})
-New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = TitleBar})
-New("Frame", {
-	Size = UDim2.new(1, 0, 0, 12),
-	Position = UDim2.new(0, 0, 1, -12),
-	BackgroundColor3 = C.Bg,
-	BackgroundTransparency = 0.15,
-	BorderSizePixel = 0,
-	Parent = TitleBar,
-})
+local Pages = {}
+local NavButtons = {}
 
-New("TextLabel", {
-	Size = UDim2.new(0, 220, 1, 0),
-	Position = UDim2.fromOffset(16, 0),
-	BackgroundTransparency = 1,
-	Text = "UNIVERSAL  ·  PREMIUM",
-	Font = Enum.Font.GothamMedium,
-	TextSize = 12,
-	TextColor3 = C.Text,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	Parent = TitleBar,
-})
-New("TextLabel", {
-	Size = UDim2.new(0, 40, 1, 0),
-	Position = UDim2.fromOffset(195, 0),
-	BackgroundTransparency = 1,
-	Text = "v3.0",
-	Font = Enum.Font.Gotham,
-	TextSize = 11,
-	TextColor3 = C.Muted,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	Parent = TitleBar,
-})
-
-local function MakeDot(x, color, cb)
+local function MakeNavBtn(id, label, icon)
 	local b = New("TextButton", {
-		Size = UDim2.fromOffset(22, 22),
-		Position = UDim2.new(1, x, 0.5, 0),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = color,
-		BackgroundTransparency = 0.55,
+		Name = id,
+		Size = UDim2.fromOffset(62, 36),
+		BackgroundColor3 = Theme.Elevated,
+		BackgroundTransparency = 1,
 		Text = "",
 		AutoButtonColor = false,
-		Parent = TitleBar,
+		Parent = Nav,
 	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = b})
+	New("UICorner", {CornerRadius = UDim.new(0, 10), Parent = b})
+	local txt = New("TextLabel", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Text = label,
+		Font = Enum.Font.GothamMedium,
+		TextSize = 11,
+		TextColor3 = Theme.Dim,
+		Parent = b,
+	})
 	b.MouseEnter:Connect(function()
-		Tw(b, {BackgroundTransparency = 0.15, Size = UDim2.fromOffset(24, 24)}, 0.12)
+		if State.ActivePage ~= id then
+			Tw(b, {BackgroundTransparency = 0.6}, 0.12)
+			Tw(txt, {TextColor3 = Theme.Text}, 0.12)
+		end
 	end)
 	b.MouseLeave:Connect(function()
-		Tw(b, {BackgroundTransparency = 0.55, Size = UDim2.fromOffset(22, 22)}, 0.12)
+		if State.ActivePage ~= id then
+			Tw(b, {BackgroundTransparency = 1}, 0.12)
+			Tw(txt, {TextColor3 = Theme.Dim}, 0.12)
+		end
 	end)
-	b.MouseButton1Click:Connect(cb)
+	b.MouseButton1Click:Connect(function() SwitchPage(id) end)
+	NavButtons[id] = {Btn = b, Txt = txt}
 	return b
 end
 
-MakeDot(-18, C.Danger, function() Toggle(false) end)
-MakeDot(-46, C.Dim, function()
-	Tw(Main, {Size = UDim2.fromOffset(680, 40)}, 0.28, Enum.EasingStyle.Quint)
-end)
-
--- drag
-TitleBar.InputBegan:Connect(function(i)
-	if i.UserInputType == Enum.UserInputType.MouseButton1 then
-		State.Dragging = true
-		State.DragStart = i.Position
-		State.StartPos = Main.Position
-	end
-end)
-TitleBar.InputEnded:Connect(function(i)
-	if i.UserInputType == Enum.UserInputType.MouseButton1 then State.Dragging = false end
-end)
-UserInputService.InputChanged:Connect(function(i)
-	if State.Dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-		local d = i.Position - State.DragStart
-		Main.Position = UDim2.new(
-			State.StartPos.X.Scale, State.StartPos.X.Offset + d.X,
-			State.StartPos.Y.Scale, State.StartPos.Y.Offset + d.Y
-		)
-	end
-end)
+MakeNavBtn("Home", "Home")
+MakeNavBtn("Commands", "Cmds")
+MakeNavBtn("Players", "Players")
+MakeNavBtn("Scripts", "Scripts")
+MakeNavBtn("Settings", "Settings")
 
 ----------------------------------------------------------------
--- Sidebar
+-- Status pill (bottom center notifications)
 ----------------------------------------------------------------
-local Side = New("Frame", {
-	Size = UDim2.new(0, 140, 1, -40),
-	Position = UDim2.fromOffset(0, 40),
-	BackgroundColor3 = C.Bg,
-	BackgroundTransparency = 0.2,
-	BorderSizePixel = 0,
-	Parent = Main,
-})
-
-local SideList = New("ScrollingFrame", {
-	Size = UDim2.new(1, -6, 1, -10),
-	Position = UDim2.fromOffset(3, 6),
+local StatusHost = New("Frame", {
+	Size = UDim2.fromOffset(280, 36),
+	Position = UDim2.new(0.5, 0, 1, -90),
+	AnchorPoint = Vector2.new(0.5, 1),
 	BackgroundTransparency = 1,
-	BorderSizePixel = 0,
-	ScrollBarThickness = 2,
-	ScrollBarImageColor3 = C.Border,
-	CanvasSize = UDim2.new(0,0,0,0),
-	AutomaticCanvasSize = Enum.AutomaticSize.Y,
-	Parent = Side,
-})
-New("UIListLayout", {Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = SideList})
-
-local Content = New("Frame", {
-	Size = UDim2.new(1, -148, 1, -48),
-	Position = UDim2.fromOffset(144, 44),
-	BackgroundTransparency = 1,
-	ClipsDescendants = true,
-	Parent = Main,
+	Parent = Gui,
 })
 
-local Tabs, TabBtns = {}, {}
-
-local function MakeTab(id, label, order)
-	local btn = New("TextButton", {
-		Name = id,
-		Size = UDim2.new(1, 0, 0, 32),
-		BackgroundColor3 = C.Elevated,
-		BackgroundTransparency = 1,
-		Text = "",
-		AutoButtonColor = false,
-		LayoutOrder = order,
-		Parent = SideList,
-	})
-	New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = btn})
-
-	local ind = New("Frame", {
-		Size = UDim2.fromOffset(3, 14),
-		Position = UDim2.new(0, 5, 0.5, 0),
-		AnchorPoint = Vector2.new(0, 0.5),
-		BackgroundColor3 = C.Accent,
-		BackgroundTransparency = 1,
+local function Notify(text, color)
+	local pill = New("Frame", {
+		Size = UDim2.fromOffset(0, 32),
+		Position = UDim2.fromScale(0.5, 0),
+		AnchorPoint = Vector2.new(0.5, 0),
+		BackgroundColor3 = Theme.Card,
+		BackgroundTransparency = 0.1,
 		BorderSizePixel = 0,
-		Parent = btn,
+		Parent = StatusHost,
 	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = ind})
-
-	local txt = New("TextLabel", {
-		Size = UDim2.new(1, -22, 1, 0),
-		Position = UDim2.fromOffset(16, 0),
+	New("UICorner", {CornerRadius = UDim.new(0, 10), Parent = pill})
+	New("UIStroke", {Color = color or Theme.Accent, Thickness = 1, Transparency = 0.4, Parent = pill})
+	local lbl = New("TextLabel", {
+		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
-		Text = label,
+		Text = text,
 		Font = Enum.Font.Gotham,
 		TextSize = 12,
-		TextColor3 = C.Dim,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = btn,
+		TextColor3 = Theme.Text,
+		Parent = pill,
 	})
-
-	btn.MouseEnter:Connect(function()
-		if State.Tab ~= id then
-			Tw(btn, {BackgroundTransparency = 0.55}, 0.14)
-			Tw(txt, {TextColor3 = C.Text}, 0.14)
-		end
+	Tw(pill, {Size = UDim2.fromOffset(math.clamp(#text * 7 + 28, 120, 260), 32)}, 0.25, Enum.EasingStyle.Back)
+	task.delay(2.2, function()
+		Tw(pill, {BackgroundTransparency = 1, Size = UDim2.fromOffset(0, 32)}, 0.2).Completed:Connect(function()
+			pill:Destroy()
+		end)
+		lbl.TextTransparency = 1
 	end)
-	btn.MouseLeave:Connect(function()
-		if State.Tab ~= id then
-			Tw(btn, {BackgroundTransparency = 1}, 0.14)
-			Tw(txt, {TextColor3 = C.Dim}, 0.14)
-		end
-	end)
-	btn.MouseButton1Click:Connect(function() SwitchTab(id) end)
-
-	TabBtns[id] = {Btn = btn, Ind = ind, Txt = txt}
 end
 
-MakeTab("ESP", "ESP", 1)
-MakeTab("Aim", "Aim", 2)
-MakeTab("NPC", "NPC Lock", 3)
-MakeTab("Hitbox", "Hitbox", 4)
-MakeTab("Movement", "Movement", 5)
-MakeTab("Crosshair", "Crosshair", 6)
-MakeTab("Performance", "Perf", 7)
-MakeTab("UI", "UI", 8)
-MakeTab("Config", "Config", 9)
-
 ----------------------------------------------------------------
--- Panel builders
+-- Page containers (floating cards that appear/disappear)
 ----------------------------------------------------------------
-local function MakePanel(name)
-	local f = New("ScrollingFrame", {
-		Name = name,
+local function MakePage(id)
+	local page = New("Frame", {
+		Name = id,
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ScrollBarThickness = 3,
-		ScrollBarImageColor3 = C.Border,
-		CanvasSize = UDim2.new(0,0,0,0),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		Visible = false,
-		Parent = Content,
+		Parent = Gui,
 	})
-	New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = f})
-	New("UIPadding", {
-		PaddingTop = UDim.new(0, 4),
-		PaddingLeft = UDim.new(0, 4),
-		PaddingRight = UDim.new(0, 8),
-		PaddingBottom = UDim.new(0, 10),
-		Parent = f,
-	})
-	Tabs[name] = f
-	return f
+	Pages[id] = page
+	return page
 end
 
-local function Section(parent, title, order)
-	local h = New("Frame", {
-		Size = UDim2.new(1, 0, 0, 20),
-		BackgroundTransparency = 1,
-		LayoutOrder = order,
-		Parent = parent,
+function SwitchPage(id)
+	if State.ActivePage == id then return end
+	local old = State.ActivePage
+	State.ActivePage = id
+
+	if NavButtons[old] then
+		Tw(NavButtons[old].Btn, {BackgroundTransparency = 1}, 0.15)
+		Tw(NavButtons[old].Txt, {TextColor3 = Theme.Dim}, 0.15)
+	end
+	if NavButtons[id] then
+		Tw(NavButtons[id].Btn, {BackgroundTransparency = 0.35}, 0.15)
+		Tw(NavButtons[id].Txt, {TextColor3 = Theme.Text}, 0.15)
+	end
+
+	if Pages[old] then Pages[old].Visible = false end
+	if Pages[id] then
+		Pages[id].Visible = true
+	end
+end
+
+----------------------------------------------------------------
+-- HOME PAGE
+----------------------------------------------------------------
+local Home = MakePage("Home")
+
+-- Left profile / FPS card
+local profileCard = MakeCard(Home, UDim2.fromOffset(200, 160), UDim2.fromOffset(24, 80))
+New("TextLabel", {
+	Size = UDim2.new(1, -20, 0, 20),
+	Position = UDim2.fromOffset(14, 12),
+	BackgroundTransparency = 1,
+	Text = "Universal Premium",
+	Font = Enum.Font.GothamMedium,
+	TextSize = 13,
+	TextColor3 = Theme.Text,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = profileCard,
+})
+local fpsLbl = New("TextLabel", {
+	Size = UDim2.new(1, -20, 0, 36),
+	Position = UDim2.fromOffset(14, 40),
+	BackgroundTransparency = 1,
+	Text = "-- FPS",
+	Font = Enum.Font.GothamBold,
+	TextSize = 26,
+	TextColor3 = Theme.Accent,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = profileCard,
+})
+New("TextLabel", {
+	Size = UDim2.new(1, -20, 0, 16),
+	Position = UDim2.fromOffset(14, 82),
+	BackgroundTransparency = 1,
+	Text = "v4.0  ·  Visual Shell",
+	Font = Enum.Font.Gotham,
+	TextSize = 11,
+	TextColor3 = Theme.Muted,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = profileCard,
+})
+
+-- Quick actions card
+local quickCard = MakeCard(Home, UDim2.fromOffset(220, 160), UDim2.fromOffset(240, 80))
+New("TextLabel", {
+	Size = UDim2.new(1, -16, 0, 18),
+	Position = UDim2.fromOffset(12, 10),
+	BackgroundTransparency = 1,
+	Text = "Quick Actions",
+	Font = Enum.Font.GothamMedium,
+	TextSize = 12,
+	TextColor3 = Theme.Dim,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = quickCard,
+})
+
+local function QuickBtn(text, y, color, cb)
+	local b = New("TextButton", {
+		Size = UDim2.new(1, -24, 0, 32),
+		Position = UDim2.fromOffset(12, y),
+		BackgroundColor3 = color or Theme.Elevated,
+		BackgroundTransparency = 0.25,
+		Text = text,
+		Font = Enum.Font.Gotham,
+		TextSize = 12,
+		TextColor3 = Theme.Text,
+		AutoButtonColor = false,
+		Parent = quickCard,
 	})
+	New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = b})
+	b.MouseEnter:Connect(function() Tw(b, {BackgroundTransparency = 0.05}, 0.12) end)
+	b.MouseLeave:Connect(function() Tw(b, {BackgroundTransparency = 0.25}, 0.12) end)
+	b.MouseButton1Click:Connect(cb)
+end
+
+QuickBtn("Open Commands", 38, Theme.Accent, function() SwitchPage("Commands") end)
+QuickBtn("Open Settings", 78, Theme.Accent2, function() SwitchPage("Settings") end)
+QuickBtn("Toggle UI (RightShift)", 118, Theme.Elevated, function() ToggleUI() end)
+
+-- Server card
+local serverCard = MakeCard(Home, UDim2.fromOffset(200, 120), UDim2.fromOffset(480, 80))
+New("TextLabel", {
+	Size = UDim2.new(1, -16, 0, 18),
+	Position = UDim2.fromOffset(12, 10),
+	BackgroundTransparency = 1,
+	Text = "This Server",
+	Font = Enum.Font.GothamMedium,
+	TextSize = 12,
+	TextColor3 = Theme.Dim,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = serverCard,
+})
+local playerCount = New("TextLabel", {
+	Size = UDim2.new(1, -16, 0, 28),
+	Position = UDim2.fromOffset(12, 36),
+	BackgroundTransparency = 1,
+	Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers,
+	Font = Enum.Font.GothamBold,
+	TextSize = 20,
+	TextColor3 = Theme.Text,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = serverCard,
+})
+New("TextLabel", {
+	Size = UDim2.new(1, -16, 0, 16),
+	Position = UDim2.fromOffset(12, 72),
+	BackgroundTransparency = 1,
+	Text = "Players online",
+	Font = Enum.Font.Gotham,
+	TextSize = 11,
+	TextColor3 = Theme.Muted,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = serverCard,
+})
+
+----------------------------------------------------------------
+-- COMMANDS PAGE  (feature toggles + keybinds)
+----------------------------------------------------------------
+local Cmds = MakePage("Commands")
+
+local cmdLeft = MakeCard(Cmds, UDim2.fromOffset(280, 380), UDim2.fromOffset(24, 60))
+New("TextLabel", {
+	Size = UDim2.new(1, -20, 0, 22),
+	Position = UDim2.fromOffset(14, 12),
+	BackgroundTransparency = 1,
+	Text = "Quick Toggles",
+	Font = Enum.Font.GothamMedium,
+	TextSize = 13,
+	TextColor3 = Theme.Text,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = cmdLeft,
+})
+
+local toggleList = New("ScrollingFrame", {
+	Size = UDim2.new(1, -16, 1, -44),
+	Position = UDim2.fromOffset(8, 40),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	ScrollBarThickness = 3,
+	ScrollBarImageColor3 = Theme.Border,
+	CanvasSize = UDim2.new(0,0,0,0),
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+	Parent = cmdLeft,
+})
+New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = toggleList})
+
+local function FeatureRow(name, featureKey, order)
+	local row = New("Frame", {
+		Size = UDim2.new(1, -4, 0, 40),
+		BackgroundColor3 = Theme.Card2,
+		BackgroundTransparency = 0.3,
+		BorderSizePixel = 0,
+		LayoutOrder = order,
+		Parent = toggleList,
+	})
+	New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = row})
+
 	New("TextLabel", {
-		Size = UDim2.fromScale(1, 1),
+		Size = UDim2.new(0.55, 0, 1, 0),
+		Position = UDim2.fromOffset(10, 0),
 		BackgroundTransparency = 1,
-		Text = title,
+		Text = name,
+		Font = Enum.Font.Gotham,
+		TextSize = 12,
+		TextColor3 = Theme.Text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = row,
+	})
+
+	local tg = MakeToggle(row, UDim2.fromOffset(36, 20), UDim2.new(1, -12, 0.5, 0), Features[featureKey].Enabled, function(on)
+		Features[featureKey].Enabled = on
+		Notify(name .. (on and " enabled" or " disabled"), on and Theme.Success or Theme.Dim)
+	end)
+end
+
+FeatureRow("ESP", "ESP", 1)
+FeatureRow("Aim (placeholder)", "Aim", 2)
+FeatureRow("NPC Lock", "NPC", 3)
+FeatureRow("Hitbox Visual", "Hitbox", 4)
+FeatureRow("Fly (visual)", "Fly", 5)
+FeatureRow("Noclip (visual)", "Noclip", 6)
+FeatureRow("Speed", "Speed", 7)
+FeatureRow("Infinite Jump", "InfJump", 8)
+
+-- Right: Keybind manager
+local keyCard = MakeCard(Cmds, UDim2.fromOffset(340, 380), UDim2.fromOffset(320, 60))
+New("TextLabel", {
+	Size = UDim2.new(1, -20, 0, 22),
+	Position = UDim2.fromOffset(14, 12),
+	BackgroundTransparency = 1,
+	Text = "Keybinds",
+	Font = Enum.Font.GothamMedium,
+	TextSize = 13,
+	TextColor3 = Theme.Text,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = keyCard,
+})
+New("TextLabel", {
+	Size = UDim2.new(1, -20, 0, 16),
+	Position = UDim2.fromOffset(14, 34),
+	BackgroundTransparency = 1,
+	Text = "Click a key to rebind · Cycle mode with the button",
+	Font = Enum.Font.Gotham,
+	TextSize = 11,
+	TextColor3 = Theme.Muted,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = keyCard,
+})
+
+local keyList = New("ScrollingFrame", {
+	Size = UDim2.new(1, -16, 1, -60),
+	Position = UDim2.fromOffset(8, 56),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	ScrollBarThickness = 3,
+	ScrollBarImageColor3 = Theme.Border,
+	CanvasSize = UDim2.new(0,0,0,0),
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+	Parent = keyCard,
+})
+New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = keyList})
+
+local KeybindRows = {}
+
+local function KeybindRow(display, featureKey, order)
+	local feat = Features[featureKey]
+	local row = New("Frame", {
+		Size = UDim2.new(1, -4, 0, 42),
+		BackgroundColor3 = Theme.Card2,
+		BackgroundTransparency = 0.3,
+		BorderSizePixel = 0,
+		LayoutOrder = order,
+		Parent = keyList,
+	})
+	New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = row})
+
+	New("TextLabel", {
+		Size = UDim2.new(0.4, 0, 1, 0),
+		Position = UDim2.fromOffset(10, 0),
+		BackgroundTransparency = 1,
+		Text = display,
+		Font = Enum.Font.Gotham,
+		TextSize = 12,
+		TextColor3 = Theme.Text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = row,
+	})
+
+	local keyBtn = New("TextButton", {
+		Size = UDim2.fromOffset(70, 26),
+		Position = UDim2.new(0.42, 0, 0.5, 0),
+		AnchorPoint = Vector2.new(0, 0.5),
+		BackgroundColor3 = Theme.Elevated,
+		BackgroundTransparency = 0.2,
+		Text = KeyNames[feat.Key] or "None",
 		Font = Enum.Font.GothamMedium,
 		TextSize = 11,
-		TextColor3 = C.Muted,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = h,
+		TextColor3 = Theme.Text,
+		AutoButtonColor = false,
+		Parent = row,
 	})
+	New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = keyBtn})
+
+	local modeBtn = New("TextButton", {
+		Size = UDim2.fromOffset(64, 26),
+		Position = UDim2.new(1, -76, 0.5, 0),
+		AnchorPoint = Vector2.new(0, 0.5),
+		BackgroundColor3 = Theme.Accent,
+		BackgroundTransparency = 0.35,
+		Text = feat.Mode,
+		Font = Enum.Font.GothamMedium,
+		TextSize = 11,
+		TextColor3 = Theme.Text,
+		AutoButtonColor = false,
+		Parent = row,
+	})
+	New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = modeBtn})
+
+	keyBtn.MouseButton1Click:Connect(function()
+		State.KeybindListening = featureKey
+		keyBtn.Text = "..."
+		Tw(keyBtn, {BackgroundColor3 = Theme.Warn}, 0.12)
+		Notify("Press a key for " .. display, Theme.Warn)
+	end)
+
+	modeBtn.MouseButton1Click:Connect(function()
+		local order = {"Toggle", "Hold", "Press"}
+		local idx = table.find(order, feat.Mode) or 1
+		idx = idx % #order + 1
+		feat.Mode = order[idx]
+		modeBtn.Text = feat.Mode
+		Notify(display .. " mode → " .. feat.Mode, Theme.Accent)
+	end)
+
+	KeybindRows[featureKey] = {KeyBtn = keyBtn, ModeBtn = modeBtn}
 end
 
-local function ToggleRow(parent, label, key, subkey, order)
+KeybindRow("ESP", "ESP", 1)
+KeybindRow("Aim", "Aim", 2)
+KeybindRow("NPC Lock", "NPC", 3)
+KeybindRow("Hitbox", "Hitbox", 4)
+KeybindRow("Fly", "Fly", 5)
+KeybindRow("Noclip", "Noclip", 6)
+KeybindRow("Speed", "Speed", 7)
+KeybindRow("Inf Jump", "InfJump", 8)
+
+----------------------------------------------------------------
+-- PLAYERS PAGE (visual list only)
+----------------------------------------------------------------
+local PlayersPage = MakePage("Players")
+local plrCard = MakeCard(PlayersPage, UDim2.fromOffset(320, 400), UDim2.fromOffset(40, 50))
+New("TextLabel", {
+	Size = UDim2.new(1, -20, 0, 22),
+	Position = UDim2.fromOffset(14, 12),
+	BackgroundTransparency = 1,
+	Text = "Players",
+	Font = Enum.Font.GothamMedium,
+	TextSize = 13,
+	TextColor3 = Theme.Text,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = plrCard,
+})
+local plrList = New("ScrollingFrame", {
+	Size = UDim2.new(1, -16, 1, -44),
+	Position = UDim2.fromOffset(8, 40),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	ScrollBarThickness = 3,
+	ScrollBarImageColor3 = Theme.Border,
+	CanvasSize = UDim2.new(0,0,0,0),
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+	Parent = plrCard,
+})
+New("UIListLayout", {Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = plrList})
+
+local function RefreshPlayers()
+	for _, c in pairs(plrList:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	for i, plr in ipairs(Players:GetPlayers()) do
+		local row = New("Frame", {
+			Size = UDim2.new(1, -4, 0, 36),
+			BackgroundColor3 = Theme.Card2,
+			BackgroundTransparency = 0.35,
+			BorderSizePixel = 0,
+			LayoutOrder = i,
+			Parent = plrList,
+		})
+		New("UICorner", {CornerRadius = UDim.new(0, 7), Parent = row})
+		New("TextLabel", {
+			Size = UDim2.new(1, -12, 1, 0),
+			Position = UDim2.fromOffset(10, 0),
+			BackgroundTransparency = 1,
+			Text = plr.DisplayName .. "  (@" .. plr.Name .. ")",
+			Font = Enum.Font.Gotham,
+			TextSize = 12,
+			TextColor3 = plr == LP and Theme.Accent or Theme.Text,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Parent = row,
+		})
+	end
+	playerCount.Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers
+end
+RefreshPlayers()
+Players.PlayerAdded:Connect(RefreshPlayers)
+Players.PlayerRemoving:Connect(RefreshPlayers)
+
+----------------------------------------------------------------
+-- SCRIPTS PAGE (placeholder)
+----------------------------------------------------------------
+local ScriptsPage = MakePage("Scripts")
+local scriptCard = MakeCard(ScriptsPage, UDim2.fromOffset(400, 200), UDim2.fromOffset(40, 80))
+New("TextLabel", {
+	Size = UDim2.new(1, -24, 0, 24),
+	Position = UDim2.fromOffset(16, 20),
+	BackgroundTransparency = 1,
+	Text = "Scripts",
+	Font = Enum.Font.GothamMedium,
+	TextSize = 14,
+	TextColor3 = Theme.Text,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = scriptCard,
+})
+New("TextLabel", {
+	Size = UDim2.new(1, -24, 0, 60),
+	Position = UDim2.fromOffset(16, 56),
+	BackgroundTransparency = 1,
+	Text = "Script hub placeholder.\nThis shell is UI-only.\nLoad external scripts from your executor.",
+	Font = Enum.Font.Gotham,
+	TextSize = 12,
+	TextColor3 = Theme.Dim,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Top,
+	Parent = scriptCard,
+})
+
+----------------------------------------------------------------
+-- SETTINGS PAGE
+----------------------------------------------------------------
+local SettingsPage = MakePage("Settings")
+local setCard = MakeCard(SettingsPage, UDim2.fromOffset(360, 320), UDim2.fromOffset(40, 60))
+New("TextLabel", {
+	Size = UDim2.new(1, -20, 0, 22),
+	Position = UDim2.fromOffset(14, 12),
+	BackgroundTransparency = 1,
+	Text = "Settings",
+	Font = Enum.Font.GothamMedium,
+	TextSize = 13,
+	TextColor3 = Theme.Text,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = setCard,
+})
+
+local setList = New("Frame", {
+	Size = UDim2.new(1, -20, 1, -50),
+	Position = UDim2.fromOffset(10, 44),
+	BackgroundTransparency = 1,
+	Parent = setCard,
+})
+New("UIListLayout", {Padding = UDim.new(0, 6), Parent = setList})
+
+local function SettingToggle(label, initial, cb)
 	local row = New("Frame", {
 		Size = UDim2.new(1, 0, 0, 36),
-		BackgroundColor3 = C.Panel2,
-		BackgroundTransparency = 0.25,
+		BackgroundColor3 = Theme.Card2,
+		BackgroundTransparency = 0.3,
 		BorderSizePixel = 0,
-		LayoutOrder = order,
-		Parent = parent,
+		Parent = setList,
 	})
-	New("UICorner", {CornerRadius = UDim.new(0, 9), Parent = row})
-
+	New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = row})
 	New("TextLabel", {
-		Size = UDim2.new(1, -70, 1, 0),
+		Size = UDim2.new(1, -60, 1, 0),
 		Position = UDim2.fromOffset(12, 0),
 		BackgroundTransparency = 1,
 		Text = label,
 		Font = Enum.Font.Gotham,
 		TextSize = 12,
-		TextColor3 = C.Text,
+		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = row,
 	})
-
-	local track = New("Frame", {
-		Size = UDim2.fromOffset(38, 20),
-		Position = UDim2.new(1, -50, 0.5, 0),
-		AnchorPoint = Vector2.new(0, 0.5),
-		BackgroundColor3 = C.Border,
-		BorderSizePixel = 0,
-		Parent = row,
-	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = track})
-
-	local knob = New("Frame", {
-		Size = UDim2.fromOffset(16, 16),
-		Position = UDim2.fromOffset(2, 2),
-		BackgroundColor3 = Color3.fromRGB(255,255,255),
-		BorderSizePixel = 0,
-		Parent = track,
-	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = knob})
-
-	local function refresh()
-		local on = Settings[key][subkey]
-		Tw(track, {BackgroundColor3 = on and C.Accent or C.Border}, 0.18)
-		Tw(knob, {Position = on and UDim2.fromOffset(20, 2) or UDim2.fromOffset(2, 2)}, 0.18, Enum.EasingStyle.Back)
-	end
-	refresh()
-
-	local hit = New("TextButton", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Text = "",
-		Parent = row,
-	})
-	hit.MouseButton1Click:Connect(function()
-		Settings[key][subkey] = not Settings[key][subkey]
-		refresh()
-	end)
-	hit.MouseEnter:Connect(function()
-		Tw(row, {BackgroundTransparency = 0.1}, 0.12)
-	end)
-	hit.MouseLeave:Connect(function()
-		Tw(row, {BackgroundTransparency = 0.25}, 0.12)
-	end)
+	MakeToggle(row, UDim2.fromOffset(36, 20), UDim2.new(1, -12, 0.5, 0), initial, cb)
 end
 
-local function SliderRow(parent, label, key, subkey, min, max, order)
-	local row = New("Frame", {
-		Size = UDim2.new(1, 0, 0, 50),
-		BackgroundColor3 = C.Panel2,
-		BackgroundTransparency = 0.25,
-		BorderSizePixel = 0,
-		LayoutOrder = order,
-		Parent = parent,
-	})
-	New("UICorner", {CornerRadius = UDim.new(0, 9), Parent = row})
-
-	local val = New("TextLabel", {
-		Size = UDim2.new(1, -20, 0, 18),
-		Position = UDim2.fromOffset(12, 6),
-		BackgroundTransparency = 1,
-		Text = label .. ": " .. tostring(Settings[key][subkey]),
-		Font = Enum.Font.Gotham,
-		TextSize = 12,
-		TextColor3 = C.Text,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = row,
-	})
-
-	local bar = New("Frame", {
-		Size = UDim2.new(1, -24, 0, 6),
-		Position = UDim2.new(0, 12, 1, -16),
-		BackgroundColor3 = C.Border,
-		BorderSizePixel = 0,
-		Parent = row,
-	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = bar})
-
-	local fill = New("Frame", {
-		Size = UDim2.new(math.clamp((Settings[key][subkey]-min)/(max-min), 0, 1), 0, 1, 0),
-		BackgroundColor3 = C.Accent,
-		BorderSizePixel = 0,
-		Parent = bar,
-	})
-	New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = fill})
-
-	local hit = New("TextButton", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Text = "",
-		Parent = bar,
-	})
-	hit.MouseButton1Click:Connect(function()
-		local mx = UserInputService:GetMouseLocation().X
-		local abs = bar.AbsolutePosition.X
-		local sz = math.max(bar.AbsoluteSize.X, 1)
-		local pct = math.clamp((mx - abs) / sz, 0, 1)
-		local v = math.floor(min + pct * (max - min) + 0.5)
-		Settings[key][subkey] = v
-		Tw(fill, {Size = UDim2.new(pct, 0, 1, 0)}, 0.12)
-		val.Text = label .. ": " .. v
-	end)
-end
-
-----------------------------------------------------------------
--- Build panels
-----------------------------------------------------------------
-local p = MakePanel("ESP")
-Section(p, "ESP VISUALIZATION", 1)
-ToggleRow(p, "Master Toggle", "ESP", "Enabled", 2)
-ToggleRow(p, "Bounding Box", "ESP", "Box", 3)
-ToggleRow(p, "Name Tags", "ESP", "Name", 4)
-ToggleRow(p, "Distance", "ESP", "Dist", 5)
-ToggleRow(p, "Team Check", "ESP", "Team", 6)
-SliderRow(p, "Max Distance", "ESP", "Max", 50, 2000, 7)
-
-p = MakePanel("Aim")
-Section(p, "AIM TRAINER (PLACEHOLDER)", 1)
-ToggleRow(p, "Enabled", "Aim", "Enabled", 2)
-SliderRow(p, "FOV", "Aim", "FOV", 30, 300, 3)
-SliderRow(p, "Smoothness", "Aim", "Smooth", 0, 1, 4)
-ToggleRow(p, "Team Check", "Aim", "Team", 5)
-ToggleRow(p, "Visible Check", "Aim", "Visible", 6)
-
-p = MakePanel("NPC")
-Section(p, "NPC LOCK (VISUAL ONLY)", 1)
-ToggleRow(p, "Enabled", "NPC", "Enabled", 2)
-ToggleRow(p, "Lock", "NPC", "Lock", 3)
-SliderRow(p, "Range", "NPC", "Range", 10, 200, 4)
-
-p = MakePanel("Hitbox")
-Section(p, "HITBOX VISUAL", 1)
-ToggleRow(p, "Enabled", "Hitbox", "Enabled", 2)
-ToggleRow(p, "Show Boxes", "Hitbox", "Show", 3)
-SliderRow(p, "Scale", "Hitbox", "Scale", 0.5, 3, 4)
-
-p = MakePanel("Movement")
-Section(p, "MOVEMENT", 1)
-SliderRow(p, "WalkSpeed", "Movement", "Speed", 8, 100, 2)
-SliderRow(p, "JumpPower", "Movement", "Jump", 20, 150, 3)
-ToggleRow(p, "Fly (visual)", "Movement", "Fly", 4)
-ToggleRow(p, "Noclip (visual)", "Movement", "Noclip", 5)
-
-p = MakePanel("Crosshair")
-Section(p, "CROSSHAIR", 1)
-ToggleRow(p, "Enabled", "Crosshair", "Enabled", 2)
-SliderRow(p, "Size", "Crosshair", "Size", 4, 30, 3)
-SliderRow(p, "Thickness", "Crosshair", "Thick", 1, 6, 4)
-SliderRow(p, "Gap", "Crosshair", "Gap", 0, 20, 5)
-
-p = MakePanel("Performance")
-Section(p, "PERFORMANCE", 1)
-ToggleRow(p, "Low-End Mode", "Performance", "Low", 2)
-SliderRow(p, "Update Rate", "Performance", "Rate", 15, 120, 3)
-
-p = MakePanel("UI")
-Section(p, "INTERFACE", 1)
-ToggleRow(p, "Blur Background", "UI", "Blur", 2)
-
-p = MakePanel("Config")
-Section(p, "CONFIGURATION", 1)
-
-local rgbRow = New("Frame", {
-	Size = UDim2.new(1, 0, 0, 38),
-	BackgroundColor3 = C.Panel2,
-	BackgroundTransparency = 0.25,
-	BorderSizePixel = 0,
-	LayoutOrder = 2,
-	Parent = p,
-})
-New("UICorner", {CornerRadius = UDim.new(0, 9), Parent = rgbRow})
-New("TextLabel", {
-	Size = UDim2.new(1, -80, 1, 0),
-	Position = UDim2.fromOffset(12, 0),
-	BackgroundTransparency = 1,
-	Text = "Rainbow RGB Theme",
-	Font = Enum.Font.Gotham,
-	TextSize = 12,
-	TextColor3 = C.Text,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	Parent = rgbRow,
-})
-
-local rgbBtn = New("TextButton", {
-	Size = UDim2.fromOffset(64, 26),
-	Position = UDim2.new(1, -76, 0.5, 0),
-	AnchorPoint = Vector2.new(0, 0.5),
-	BackgroundColor3 = C.Accent,
-	BackgroundTransparency = 0.2,
-	Text = "OFF",
-	Font = Enum.Font.GothamMedium,
-	TextSize = 11,
-	TextColor3 = C.Text,
-	AutoButtonColor = false,
-	Parent = rgbRow,
-})
-New("UICorner", {CornerRadius = UDim.new(0, 7), Parent = rgbBtn})
-
-----------------------------------------------------------------
--- Logic
-----------------------------------------------------------------
-function SwitchTab(id)
-	if State.Tab == id then return end
-	local old = State.Tab
-	State.Tab = id
-
-	if TabBtns[old] then
-		Tw(TabBtns[old].Btn, {BackgroundTransparency = 1}, 0.18)
-		Tw(TabBtns[old].Ind, {BackgroundTransparency = 1}, 0.18)
-		Tw(TabBtns[old].Txt, {TextColor3 = C.Dim}, 0.18)
-	end
-	if TabBtns[id] then
-		Tw(TabBtns[id].Btn, {BackgroundTransparency = 0.35}, 0.18)
-		Tw(TabBtns[id].Ind, {BackgroundTransparency = 0}, 0.18)
-		Tw(TabBtns[id].Txt, {TextColor3 = C.Text}, 0.18)
-	end
-
-	if Tabs[old] then Tabs[old].Visible = false end
-	if Tabs[id] then
-		Tabs[id].Visible = true
-		Tabs[id].Position = UDim2.fromOffset(10, 0)
-		Tw(Tabs[id], {Position = UDim2.fromOffset(0, 0)}, 0.22, Enum.EasingStyle.Quint)
-	end
-end
-
-function Toggle(open)
-	State.Open = open
-	if open then
-		Main.Visible = true
-		Main.Size = UDim2.fromOffset(680, 18)
-		Main.BackgroundTransparency = 1
-		Tw(Main, {
-			Size = UDim2.fromOffset(680, 440),
-			BackgroundTransparency = 0.02
-		}, 0.36, Enum.EasingStyle.Quint)
-
-		if Settings.UI.Blur then
-			if not State.Blur then
-				State.Blur = New("BlurEffect", {Size = 0, Parent = Lighting})
-			end
-			Tw(State.Blur, {Size = 14}, 0.4)
-		end
+SettingToggle("Blur Background", true, function(on)
+	if on then
+		if not State.Blur then State.Blur = New("BlurEffect", {Size = 0, Parent = Lighting}) end
+		Tw(State.Blur, {Size = 12}, 0.3)
 	else
-		Tw(Main, {
-			Size = UDim2.fromOffset(680, 18),
-			BackgroundTransparency = 1
-		}, 0.26, Enum.EasingStyle.Quint).Completed:Connect(function()
-			Main.Visible = false
-		end)
 		if State.Blur then Tw(State.Blur, {Size = 0}, 0.25) end
 	end
-end
+end)
 
-local function SetRGB(on)
+SettingToggle("Rainbow RGB Accent", false, function(on)
+	State.RGB = on
 	if on then
-		CFG.Theme = "RGB"
-		rgbBtn.Text = "ON"
 		if State.RGBConn then State.RGBConn:Disconnect() end
 		State.RGBConn = RunService.RenderStepped:Connect(function(dt)
-			State.Hue = (State.Hue + dt * CFG.RGBSpeed) % 1
-			local col = Color3.fromHSV(State.Hue, 0.62, 1)
-			C.Accent = col
-			for _, t in pairs(TabBtns) do
-				if t.Ind.BackgroundTransparency < 0.5 then
-					t.Ind.BackgroundColor3 = col
-				end
-			end
-			rgbBtn.BackgroundColor3 = col
+			State.Hue = (State.Hue + dt * 0.25) % 1
+			Theme.Accent = Color3.fromHSV(State.Hue, 0.55, 1)
 		end)
 	else
-		CFG.Theme = "Dark"
-		rgbBtn.Text = "OFF"
-		if State.RGBConn then
-			State.RGBConn:Disconnect()
-			State.RGBConn = nil
-		end
-		C.Accent = Color3.fromRGB(110, 130, 255)
-		rgbBtn.BackgroundColor3 = C.Accent
+		if State.RGBConn then State.RGBConn:Disconnect() State.RGBConn = nil end
+		Theme.Accent = Color3.fromRGB(120, 100, 255)
 	end
-end
+end)
 
-rgbBtn.MouseButton1Click:Connect(function()
-	SetRGB(CFG.Theme ~= "RGB")
-end)
-rgbBtn.MouseEnter:Connect(function()
-	Tw(rgbBtn, {BackgroundTransparency = 0}, 0.12)
-end)
-rgbBtn.MouseLeave:Connect(function()
-	Tw(rgbBtn, {BackgroundTransparency = 0.2}, 0.12)
-end)
+----------------------------------------------------------------
+-- Input / Keybind system
+----------------------------------------------------------------
+local held = {}
 
 UserInputService.InputBegan:Connect(function(inp, gp)
 	if gp then return end
-	if inp.KeyCode == CFG.OpenKey then
-		Toggle(not State.Open)
+
+	-- Keybind listening
+	if State.KeybindListening and inp.UserInputType == Enum.UserInputType.Keyboard then
+		local featKey = State.KeybindListening
+		Features[featKey].Key = inp.KeyCode
+		if KeybindRows[featKey] then
+			KeybindRows[featKey].KeyBtn.Text = KeyNames[inp.KeyCode] or inp.KeyCode.Name
+			Tw(KeybindRows[featKey].KeyBtn, {BackgroundColor3 = Theme.Elevated}, 0.12)
+		end
+		State.KeybindListening = nil
+		Notify("Bound to " .. (KeyNames[inp.KeyCode] or inp.KeyCode.Name), Theme.Success)
+		return
+	end
+
+	-- UI toggle
+	if inp.KeyCode == Enum.KeyCode.RightShift then
+		ToggleUI()
+		return
+	end
+
+	-- Feature keybinds
+	for name, feat in pairs(Features) do
+		if feat.Key == inp.KeyCode then
+			if feat.Mode == "Toggle" then
+				feat.Enabled = not feat.Enabled
+				Notify(name .. (feat.Enabled and " on" or " off"), feat.Enabled and Theme.Success or Theme.Dim)
+			elseif feat.Mode == "Hold" then
+				feat.Enabled = true
+				held[name] = true
+			elseif feat.Mode == "Press" then
+				feat.Enabled = true
+				Notify(name .. " pressed", Theme.Accent)
+				task.delay(0.15, function() feat.Enabled = false end)
+			end
+		end
 	end
 end)
 
--- boot
-SwitchTab("ESP")
-Toggle(true)
-print("[UniversalPremium v3.0] loaded — RightShift to toggle")
+UserInputService.InputEnded:Connect(function(inp)
+	for name, feat in pairs(Features) do
+		if feat.Key == inp.KeyCode and feat.Mode == "Hold" and held[name] then
+			feat.Enabled = false
+			held[name] = nil
+		end
+	end
+end)
+
+----------------------------------------------------------------
+-- UI toggle + FPS counter
+----------------------------------------------------------------
+function ToggleUI()
+	State.Open = not State.Open
+	for _, page in pairs(Pages) do
+		page.Visible = State.Open and (page.Name == State.ActivePage)
+	end
+	Nav.Visible = State.Open
+	if State.Open then
+		Notify("UI opened", Theme.Accent)
+	else
+		Notify("UI closed · RightShift", Theme.Dim)
+	end
+end
+
+-- FPS
+task.spawn(function()
+	local frames = 0
+	local last = tick()
+	RunService.RenderStepped:Connect(function()
+		frames += 1
+		if tick() - last >= 1 then
+			fpsLbl.Text = frames .. " FPS"
+			frames = 0
+			last = tick()
+		end
+	end)
+end)
+
+-- Boot
+SwitchPage("Home")
+if not State.Blur then
+	State.Blur = New("BlurEffect", {Size = 0, Parent = Lighting})
+	Tw(State.Blur, {Size = 10}, 0.4)
+end
+Notify("Universal Premium v4.0 loaded", Theme.Accent)
+print("[UniversalPremium v4.0] Novoline-style shell — RightShift to toggle")
